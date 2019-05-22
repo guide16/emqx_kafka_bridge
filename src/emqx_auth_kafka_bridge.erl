@@ -1,5 +1,4 @@
-%%--------------------------------------------------------------------
-%% Copyright (c) 2015-2017 Feng Lee <feng@emqtt.io>.
+%% Copyright (c) 2018 EMQ Technologies Co., Ltd. All Rights Reserved.
 %%
 %% Licensed under the Apache License, Version 2.0 (the "License");
 %% you may not use this file except in compliance with the License.
@@ -12,22 +11,20 @@
 %% WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 %% See the License for the specific language governing permissions and
 %% limitations under the License.
-%%--------------------------------------------------------------------
 
--module(emq_auth_emqttd_kafka_bridge).
+-module(emqx_auth_kafka_bridge).
 
--behaviour(emqttd_auth_mod).
+-behaviour(emqx_auth_mod).
 
--include_lib("emqttd/include/emqttd.hrl").
+-include_lib("emqx/include/emqx.hrl").
 
 -export([init/1, check/3, description/0]).
 
 init(Opts) -> {ok, Opts}.
 
-check(#mqtt_client{client_id = ClientId, username = Username}, Password, _Opts) ->
+check(#{client_id := ClientId, username := Username}, Password, _Opts) ->
     io:format("Auth Demo: clientId=~p, username=~p, password=~p~n",
               [ClientId, Username, Password]),
     ok.
 
 description() -> "Auth Demo Module".
-
