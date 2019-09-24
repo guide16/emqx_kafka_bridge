@@ -27,6 +27,8 @@
 
 -export([load/1, unload/0]).
 
+-define(APP, emqttd_kafka_bridge).
+
 %% Hooks functions
 
 -export([on_client_connected/3, on_client_disconnected/3]).
@@ -93,22 +95,20 @@ on_message_publish(Message = #mqtt_message{pktid   = PkgId,
                         topic   = Topic,
                         payload = Payload
 						}, _Env) ->
-    
     io:format("publish ~s~n", [emqttd_message:format(Message)]),
-    Regex = "^(client|device|paas)/products/(\\S+)/devices/(\\S+)/(command)(/\\S+)*$",
-    case re:run(Topic, Regex, [{capture, all_but_first, list}]) of
-       nomatch -> {ok, Message};
-       {match, Captured} -> [Type, ProductId, DevKey|Fix] = Captured,	
-         {ok, Options} = application:get_env(emqttd_kafka_bridge, values),
-         Topics = proplists:get_value(kafka_producer_topic, Options),
-         case proplists:get_value(Type, Topics) of
-             undefined -> io:format("publish no match topic ~s", [Type]);
-             ProduceTopic -> 
-                  Partitions = proplists:get_value(kafka_producer_partitions, Options),
-                  Key = iolist_to_binary([ProductId,"_",DevKey]),   
-                  ok = brod:produce_sync(brod_client_1, ProduceTopic, getPartiton(Key,Partitions), Key, Payload)	
+    MP = proplists:get_value(regex, _Env),
+    case re:run(Topic, MP, [{capture, all_but_first, list}]) of
+        nomatch -> {ok, Message};
+        {match, Captured} -> [Type, ProductId, DevKey|Fix] = Captured,	
+            Topics = proplists:get_value(topic, _Env),
+            case proplists:get_value(Type, Topics) of
+                undefined -> io:format("publish no match topic ~s", [Type]);
+                ProduceTopic -> 
+                    Partition = proplists:get_value(partition, _Env),   
+                    Key = iolist_to_binary([ProductId,"_",DevKey]),   
+                    ok = brod:produce_sync(brod_client_1, ProduceTopic, getPartiton(Key,Partition), Key, Payload)	
         end,
-       {ok, Message}
+        {ok, Message}
     end.
 
 on_message_delivered(ClientId, Username, Message, _Env) ->
@@ -121,12 +121,11 @@ on_message_acked(ClientId, Username, Message, _Env) ->
 
 brod_init(_Env) ->
     {ok, _} = application:ensure_all_started(brod),
-    {ok, Values} = application:get_env(emqttd_kafka_bridge, values),
-    BootstrapBroker = proplists:get_value(bootstrap_broker, Values),
-    ClientConfig = proplists:get_value(client_config, Values),
-    
+    {ok, BootstrapBroker} = application:get_env(?APP, broker),
+    {ok, ClientConfig} = application:get_env(?APP, client),
+
     ok = brod:start_client(BootstrapBroker, brod_client_1, ClientConfig),
-    io:format("Init ekaf with ~p~n", [BootstrapBroker]).
+    io:format("Init brod with ~p~n", [BootstrapBroker]).
 
 getPartiton(Key, Partitions) ->
      <<Fix:120, Match:8>> = crypto:hash(md5, Key),
@@ -143,4 +142,3 @@ unload() ->
     emqttd:unhook('message.publish', fun ?MODULE:on_message_publish/2),
     emqttd:unhook('message.delivered', fun ?MODULE:on_message_delivered/4),
     emqttd:unhook('message.acked', fun ?MODULE:on_message_acked/4).
-
